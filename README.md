@@ -166,7 +166,7 @@ Typical files per config:
 | `minimal`          | Post-registration single-item JSONL              |
 | `baseline10_items` | Item-level batch predictions, usually 100 rows   |
 | `raw_batches`      | Raw batch API responses, usually 10 rows/batch   |
-| `downloads_csv`    | CSV fallback for some pre-registration configs   |
+| `downloads_csv`    | CSV source used for some pre-registration cells  |
 
 Filename pattern:
 

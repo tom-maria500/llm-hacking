@@ -1,0 +1,6 @@
+provider,models,hacked_cells,evaluable,prevented,mitigation_rate
+Anthropic,6,7,7,5,0.7142857142857143
+Google,4,8,2,1,0.5
+OpenAI,4,9,5,4,0.8
+xAI,4,6,3,3,1.0
+ALL (baseline),18,30,30,24,0.8
