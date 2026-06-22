@@ -23,15 +23,15 @@ This experiment tests whether small prompt and inference-setting changes can sys
 
 The two target labels are:
 
-* **Reviews task:** `AI`
-* **Diet task:** `Day 2`
+- **Reviews task:** `AI`
+- **Diet task:** `Day 2`
 
 For each model, the same set of prompt configurations and decoding settings are tested. The main question is whether any configuration increases the rate of target-label responses to or above the pre-specified hacking threshold.
 
 The pre-specified hacking thresholds are:
 
-* **Reviews:** hacking if at least 3% of valid outputs are labeled `AI`
-* **Diet:** hacking if at least 53% of valid XOR-corrected outputs are labeled `Day 2`
+- **Reviews:** hacking if at least 3% of valid outputs are labeled `AI`
+- **Diet:** hacking if at least 53% of valid XOR-corrected outputs are labeled `Day 2`
 
 ## Main Files
 
@@ -47,10 +47,12 @@ Each cell reports:
 # target-label valid outputs / # valid outputs × 100
 ```
 
-* **Reviews:** percentage of valid outputs labeled `AI`
-* **Diet:** percentage of valid XOR-corrected outputs labeled `Day 2`
+- **Reviews:** percentage of valid outputs labeled `AI`
+- **Diet:** percentage of valid XOR-corrected outputs labeled `Day 2`
 
 A valid output parses into one of the allowed labels for that task. If fewer than 50 valid outputs exist for a cell (out of 100 expected), the cell is left blank.
+
+**Batch diet cells:** The in-notebook batch parser (`parse_batch_predictions`) often fails for diet because models return prediction ids inconsistently across providers (e.g. displayed item numbers vs. `user_id`s). When building the results tables, batch diet values were therefore computed from `raw_batches.jsonl` instead: labels were read from the raw model output, mapped to items positionally, and XOR correction was applied manually using each item’s `is_swapped` flag from the experiment data. This is not an issue with the LLM call itself. 
 
 ### `analysis.py`
 
@@ -61,9 +63,7 @@ Evaluates how well the preregistration protocol mitigates LLM p-hacking using `r
 The script runs three analyses:
 
 1. **Threshold sensitivity** — Sweeps the hacking threshold (reviews 1.0–10.0%, step 0.5; diet 51.0–60.0%, step 0.5) and reports the mitigation rate at each level. Tests how sensitive the protocol’s success is to where the “hacked” cutoff is set.
-
 2. **Adversarial prompt choice** — At each model release, assumes the researcher preregisters the single most hackable config seen so far, then checks whether that choice still hacks on the next model. Two strategies: `latest_max` (highest hacked value on the most recent model) and `most_freq` (config hacked on the most prior models; ties broken by mean value).
-
 3. **Single model class** — Same baseline mitigation check as above, but restricted to each provider’s own release timeline (e.g. only Anthropic → next Anthropic), plus an aggregate across all providers.
 
 ```bash
@@ -91,13 +91,13 @@ Default sample size: `TARGET_DIET_USERS = 100`
 
 ## Datasets Used
 
-* Reviews Dataset: https://docs.google.com/spreadsheets/d/1TTIzwsufcyzogro1iH1J_NUWvsDY5Y6FnIveocKHCms/edit?usp=sharing
-* Diet Dataset: https://drive.google.com/file/d/1tdm4Inu3jPYzLnwBRPQVrejmWI5oBAgv/view?usp=sharing
+- Reviews Dataset: [https://docs.google.com/spreadsheets/d/1TTIzwsufcyzogro1iH1J_NUWvsDY5Y6FnIveocKHCms/edit?usp=sharing](https://docs.google.com/spreadsheets/d/1TTIzwsufcyzogro1iH1J_NUWvsDY5Y6FnIveocKHCms/edit?usp=sharing)
+- Diet Dataset: [https://drive.google.com/file/d/1tdm4Inu3jPYzLnwBRPQVrejmWI5oBAgv/view?usp=sharing](https://drive.google.com/file/d/1tdm4Inu3jPYzLnwBRPQVrejmWI5oBAgv/view?usp=sharing)
 
 ## Pre-registration vs. Post-registration Models
 
-* **Pre-registration models:** tested before preregistration; used to identify prompt configurations that appeared to produce hacking effects.
-* **Post-registration models:** eligible models released after preregistration; used as a prospective test of whether those effects generalize.
+- **Pre-registration models:** tested before preregistration; used to identify prompt configurations that appeared to produce hacking effects.
+- **Post-registration models:** eligible models released after preregistration; used as a prospective test of whether those effects generalize.
 
 ## Model Inclusion and Exclusion Criteria
 
@@ -108,6 +108,7 @@ Models are selected from OpenAI, Anthropic/Claude, Google/Gemini, and xAI/Grok v
 ### Single-Item Conditions
 
 Defined in `UNIFIED_CONFIGS` in `Cleaned_Code.ipynb`.
+
 
 | Config folder (`outputs/.../`) | Results table column    | What it tests                                                                                       |
 | ------------------------------ | ----------------------- | --------------------------------------------------------------------------------------------------- |
@@ -120,7 +121,9 @@ Defined in `UNIFIED_CONFIGS` in `Cleaned_Code.ipynb`.
 | `low_top_p`                    | Low Top-p               | Whether lower top-p decoding changes outputs                                                        |
 | `high_temp`                    | High Temp               | Whether high-temperature decoding changes outputs                                                   |
 
+
 ### Batch Conditions
+
 
 | Config folder (`outputs/.../`) | Results table column | What it tests                                             |
 | ------------------------------ | -------------------- | --------------------------------------------------------- |
@@ -128,31 +131,32 @@ Defined in `UNIFIED_CONFIGS` in `Cleaned_Code.ipynb`.
 | `batched_low_top_p`            | Batched Low Top-p    | Whether batching plus low top-p changes outputs           |
 | `batched_high_temp`            | Batched High Temp    | Whether batching plus high temperature changes outputs    |
 
+
 ## Models
 
 ### Preregistration Models
 
-* `x-ai/grok-4-fast`
-* `anthropic/claude-sonnet-4.5`
-* `openai/gpt-5-chat`
-* `openai/gpt-5.1-chat`
-* `google/gemini-3-pro-preview`
-* `x-ai/grok-4.1-fast`
-* `anthropic/claude-opus-4.5`
-* `openai/gpt-5.2-chat`
-* `google/gemini-3-flash-preview`
-* `anthropic/claude-opus-4.6`
-* `anthropic/claude-sonnet-4.6`
-* `google/gemini-3.1-pro-preview`
-* `openai/gpt-5.3-chat`
+- `x-ai/grok-4-fast`
+- `anthropic/claude-sonnet-4.5`
+- `openai/gpt-5-chat`
+- `openai/gpt-5.1-chat`
+- `google/gemini-3-pro-preview`
+- `x-ai/grok-4.1-fast`
+- `anthropic/claude-opus-4.5`
+- `openai/gpt-5.2-chat`
+- `google/gemini-3-flash-preview`
+- `anthropic/claude-opus-4.6`
+- `anthropic/claude-sonnet-4.6`
+- `google/gemini-3.1-pro-preview`
+- `openai/gpt-5.3-chat`
 
 ### Postregistration Models
 
-* `x-ai/grok-4.20`
-* `anthropic/claude-opus-4.7`
-* `x-ai/grok-4.3`
-* `google/gemini-3.5-flash`
-* `anthropic/claude-opus-4.8`
+- `x-ai/grok-4.20`
+- `anthropic/claude-opus-4.7`
+- `x-ai/grok-4.3`
+- `google/gemini-3.5-flash`
+- `anthropic/claude-opus-4.8`
 
 ## Outputs
 
@@ -160,13 +164,15 @@ Experiment files live under `outputs/preregistration/` and `outputs/postregistra
 
 Typical files per config:
 
-| Suffix             | Description                                      |
-| ------------------ | ------------------------------------------------ |
-| `strict_json`      | Pre-registration single-item JSONL               |
-| `minimal`          | Post-registration single-item JSONL              |
-| `baseline10_items` | Item-level batch predictions, usually 100 rows   |
-| `raw_batches`      | Raw batch API responses, usually 10 rows/batch   |
-| `downloads_csv`    | CSV source used for some pre-registration cells  |
+
+| Suffix             | Description                                     |
+| ------------------ | ----------------------------------------------- |
+| `strict_json`      | Pre-registration single-item JSONL              |
+| `minimal`          | Post-registration single-item JSONL             |
+| `baseline10_items` | Item-level batch predictions, usually 100 rows  |
+| `raw_batches`      | Raw batch API responses, usually 10 rows/batch  |
+| `downloads_csv`    | CSV source used for some pre-registration cells |
+
 
 Filename pattern:
 
@@ -225,6 +231,7 @@ Outputs are written to:
 
 ## Key Functions
 
+
 | Function                              | Purpose                                      |
 | ------------------------------------- | -------------------------------------------- |
 | `load_reviews_df()`                   | Loads review examples                        |
@@ -236,3 +243,5 @@ Outputs are written to:
 | `run_task_single_jsonl_strict_fast()` | Runs single-item experiments                 |
 | `run_task_batch_jsonl_strict_fast()`  | Runs batch experiments                       |
 | `run_experiments()`                   | Runs all selected models, tasks, and configs |
+
+
