@@ -14,12 +14,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from parse_outputs_jsonl import (
     BATCH,
-    MODELS,
     OUTPUTS_DIR,
     ROOT,
     SINGLE,
     build_tables,
     format_pct,
+    models_by_release_date,
 )
 
 # First 3 columns describe the model
@@ -46,7 +46,7 @@ def table_rows(task: str, tables: Dict[str, List[Dict[str, Any]]]) -> List[List[
     # Keep the output columns in same order
     configs = [cfg for cfg, _col in SINGLE] + [cfg for cfg, _col in BATCH]
 
-    for model_name, model_slug, provider, release_date in MODELS:
+    for model_name, model_slug, provider, release_date in models_by_release_date():
         row = [model_name, provider, release_date]
 
         for cfg in configs:

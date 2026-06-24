@@ -14,6 +14,7 @@ import glob
 import json
 import os
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -23,16 +24,16 @@ OUTPUTS_DIR = ROOT / "outputs_new"
 MIN_VALID = 50
 
 MODELS: List[Tuple[str, str, str, str]] = [
+    ("GPT 5 Chat", "gpt-5-chat", "OpenAI", "08/07/25"),
     ("Grok 4 Fast", "grok-4-fast", "xAI", "09/19/25"),
     ("Claude Sonnet 4.5", "claude-sonnet-4.5", "Anthropic", "09/29/25"),
-    ("GPT 5 Chat", "gpt-5-chat", "OpenAI", "10/06/25"),
     ("GPT 5.1 Chat", "gpt-5.1-chat", "OpenAI", "11/13/25"),
     ("Gemini 3 Pro Preview", "gemini-3-pro-preview", "Google", "11/18/25"),
     ("Grok 4.1 Fast", "grok-4.1-fast", "xAI", "11/19/25"),
     ("Claude Opus 4.5", "claude-opus-4.5", "Anthropic", "11/24/25"),
     ("GPT 5.2 Chat", "gpt-5.2-chat", "OpenAI", "12/10/25"),
     ("Gemini 3 Flash Preview", "gemini-3-flash-preview", "Google", "12/17/25"),
-    ("Claude Opus 4.6", "claude-opus-4.6", "Anthropic", "02/02/26"),
+    ("Claude Opus 4.6", "claude-opus-4.6", "Anthropic", "02/04/26"),
     ("Claude Sonnet 4.6", "claude-sonnet-4.6", "Anthropic", "02/17/26"),
     ("Gemini 3.1 Pro Preview", "gemini-3.1-pro-preview", "Google", "02/19/26"),
     ("GPT 5.3 Chat", "gpt-5.3-chat", "OpenAI", "03/03/26"),
@@ -44,6 +45,12 @@ MODELS: List[Tuple[str, str, str, str]] = [
     ("Gemini 3.5 Flash", "gemini-3.5-flash", "Google", "05/19/26"),
     ("Claude Opus 4.8", "claude-opus-4.8", "Anthropic", "05/27/26"),
 ]
+
+
+def models_by_release_date() -> List[Tuple[str, str, str, str]]:
+    """Return MODELS sorted chronologically by release date."""
+    return sorted(MODELS, key=lambda m: datetime.strptime(m[3], "%m/%d/%y"))
+
 
 SINGLE: List[Tuple[str, str]] = [
     ("zero_shot", "Zero-Shot"),
@@ -442,7 +449,7 @@ def build_tables(
     tables: Dict[str, List[Dict[str, Any]]] = {"reviews": [], "diet": []}
 
     for task in ("reviews", "diet"):
-        for model_name, model_slug, provider, release_date in MODELS:
+        for model_name, model_slug, provider, release_date in models_by_release_date():
             for cfg, column in SINGLE:
                 candidate = single_candidate(outputs_dir, task, model_slug, cfg, root=root)
                 tables[task].append({
