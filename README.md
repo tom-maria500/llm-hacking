@@ -7,12 +7,12 @@ This repository contains code and data for an experiment testing whether small p
 ## Repository Contents
 
 ```text
-├── Cleaned_Code.ipynb   # Run experiments (Colab + OpenRouter)
-├── analysis.py          # Mitigation analysis on the results tables
-├── analysis_out/        # Output CSVs from analysis.py
-├── diet.csv             # Diet results table (XOR-corrected Day 2 %)
-├── reviews.csv          # Reviews results table (% labeled AI)
-└── outputs/             # Raw JSONL/CSV outputs by model and config
+├── Cleaned_Code.ipynb        # Run experiments 
+├── analysis.py               # Mitigation analysis on the results tables
+├── analysis_out_correceted/  # Output CSVs from analysis.py
+├── diet.csv                  # Diet results table (XOR-corrected Day 2 %)
+├── reviews.csv               # Reviews results table (% labeled AI)
+└── outputs/                  # Raw JSONL/CSV outputs by model and config
     ├── preregistration/
     └── postregistration/
 ```
