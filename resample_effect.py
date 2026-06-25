@@ -27,6 +27,7 @@ the same columns/rows as diet.csv.
 from __future__ import annotations
 from pathlib import Path
 import csv
+import numpy as np
 import pandas as pd
 import parse_outputs_jsonl as P
 
@@ -78,6 +79,59 @@ def reweighted_pct(items, gt: dict[int, bool], x: float):
     if nB:
         return 100 * b / nB
     return None
+
+
+def cell_groups(items, gt: dict[int, bool]):
+    """Split a cell's valid, ground-truthed items into the two groups, returning
+    (a, b) float arrays of 1/0 indicators for a 'Day 2' (TARGET_LABEL) output.
+        a = group A items (Day 2 truly lower)
+        b = group B items (Day 1 truly lower)
+    Items with no ground truth are dropped, matching reweighted_pct()."""
+    a = np.array([lbl == TARGET_LABEL
+                  for iid, lbl in items if gt.get(iid) is True], float)
+    b = np.array([lbl == TARGET_LABEL
+                  for iid, lbl in items if gt.get(iid) is False], float)
+    return a, b
+
+
+def sampled_pct_from_groups(a, b, x: float, rng, n: int | None = None):
+    """Inject a true effect of size x% by SAMPLING the cell's items WITH
+    REPLACEMENT rather than reweighting them deterministically.
+
+    Each of the n draws comes from group A (Day 2 truly lower) with probability
+    x/100 and from group B with probability (100-x)/100 -- i.e. group membership
+    is drawn proportional to the injected effect strength -- and then a uniform
+    item *within* that group (with replacement). Returns the observed % of 'Day 2'
+    outputs across the n draws.
+
+    Its expectation equals reweighted_pct(); the difference is that this carries
+    the finite-sample (n-item) sampling noise a real study of that size incurs,
+    so a discovery near threshold can clear it by chance and regress on a fresh
+    draw (the winner's curse). With n defaulting to the cell's valid-item count,
+    the noise matches the original study size."""
+    nA, nB = len(a), len(b)
+    if n is None:
+        n = nA + nB
+    if n == 0:
+        return None
+    if nA and nB:
+        from_a = int(rng.binomial(n, x / 100.0))  # group drawn prop. to effect
+        hits = 0.0
+        if from_a:
+            hits += rng.choice(a, size=from_a, replace=True).sum()
+        if n - from_a:
+            hits += rng.choice(b, size=n - from_a, replace=True).sum()
+        return 100.0 * hits / n
+    if nA:  # one group only: matches reweighted_pct's fallback
+        return 100.0 * rng.choice(a, size=n, replace=True).sum() / n
+    return 100.0 * rng.choice(b, size=n, replace=True).sum() / n
+
+
+def sampled_pct(items, gt: dict[int, bool], x: float, rng, n: int | None = None):
+    """Convenience wrapper: build the (a, b) groups for a cell and draw one
+    sampled-with-replacement effect realization (see sampled_pct_from_groups)."""
+    a, b = cell_groups(items, gt)
+    return sampled_pct_from_groups(a, b, x, rng, n)
 
 
 def main():
