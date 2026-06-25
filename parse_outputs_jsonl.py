@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Parse JSONL model outputs under outputs_new/ and build result-table cells in memory
+"""Parse JSONL model outputs under outputs/ and build result-table cells in memory
 
 Jandles two kinds of outputs:
 
@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 
 ROOT = Path(__file__).resolve().parent
-OUTPUTS_DIR = ROOT / "outputs_new"
+OUTPUTS_DIR = ROOT / "outputs"
 MIN_VALID = 50
 
 MODELS: List[Tuple[str, str, str, str]] = [

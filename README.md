@@ -1,188 +1,277 @@
 # LLM Hacking Experiment
 
-This repository contains code and data for an experiment testing whether small prompt and inference-setting changes can shift LLM behavior across two classification tasks.
+This repository contains code and data for an experiment testing whether small prompt and inference-setting changes can shift LLM behavior across two classification tasks, and whether a preregistration protocol mitigates opportunistic p-hacking across model releases.
 
-**Results are reported in the paper.** This repo contains the experiment notebook, raw model outputs, results tables, and mitigation analysis code.
+**Results** are built from `reviews.csv`, `diet.csv`, and the analysis scripts below. Raw model outputs live in `outputs/`.
 
-## Repository Contents
+## Repository structure
 
 ```text
-├── Cleaned_Code.ipynb        # Run experiments 
-├── analysis.py               # Mitigation analysis on the results tables
-├── analysis_out_correceted/  # Output CSVs from analysis.py
-├── diet.csv                  # Diet results table (XOR-corrected Day 2 %)
-├── reviews.csv               # Reviews results table (% labeled AI)
-└── outputs/                  # Raw JSONL/CSV outputs by model and config
-    ├── preregistration/
-    └── postregistration/
+├── Cleaned_Code.ipynb          # Run experiments: data loading, prompts, API calls, JSONL writers
+├── parse_outputs_jsonl.py      # Parse JSONL under outputs/ into table cells
+├── build_csv.py                # Write reviews.csv and diet.csv from parse_outputs_jsonl
+├── analysis.py                 # Mitigation / adversarial / single-provider analyses
+├── extract_diet_ground_truth.py # Ground-truth Day-2-lower labels for the 100 diet users
+├── diet_base_rate.ipynb         # Notebook: verify ~50% null base rate from mfp-diaries.tsv
+├── resample_effect.py          # Inject synthetic diet effects at 55%–95%
+├── replication_analysis.py     # Replication-rate analysis on resampled diet matrices
+│
+├── reviews.csv                 # Published reviews results table (% labeled AI)
+├── diet.csv                    # Published diet results table (% XOR-corrected Day 2)
+├── outputs/                    # Raw model outputs (JSONL only)
+│   ├── preregistration/
+│   └── postregistration/
+│
+├── analysis_out/               # Mitigation analysis CSVs (from analysis.py)
+│   ├── reviews_threshold_sensitivity.csv
+│   ├── reviews_adversarial.csv
+│   ├── reviews_single_provider.csv
+│   ├── diet_threshold_sensitivity.csv
+│   ├── diet_adversarial.csv
+│   └── diet_single_provider.csv
+│
+└── analysis_resampled/         # Replication analysis (from resample_effect + replication_analysis)
+    ├── replication_rates.csv
+    └── diet_effect_{55,60,...,95}.csv
 ```
 
-## Study Design Overview
+## Study design overview
 
-This experiment tests whether small prompt and inference-setting changes can systematically shift LLM outputs toward a pre-specified target label.
+The experiment tests whether small prompt and inference-setting changes can systematically shift LLM outputs toward a pre-specified target label.
 
-The two target labels are:
 
-- **Reviews task:** `AI`
-- **Diet task:** `Day 2`
+| Task    | Target label            | Hacking threshold      |
+| ------- | ----------------------- | ---------------------- |
+| Reviews | `AI`                    | ≥ 3% of valid outputs  |
+| Diet    | `Day 2` (XOR-corrected) | ≥ 53% of valid outputs |
 
-For each model, the same set of prompt configurations and decoding settings are tested. The main question is whether any configuration increases the rate of target-label responses to or above the pre-specified hacking threshold.
 
-The pre-specified hacking thresholds are:
-
-- **Reviews:** hacking if at least 3% of valid outputs are labeled `AI`
-- **Diet:** hacking if at least 53% of valid XOR-corrected outputs are labeled `Day 2`
-
-## Main Files
-
-### `Cleaned_Code.ipynb`
-
-Main notebook for running the experiment. It includes data loading, preprocessing, prompt templates, experiment configs, model calls, JSONL writing, and single-item/batch runners.
-
-### `reviews.csv` and `diet.csv`
-
-Each cell reports:
+Each cell in `reviews.csv` / `diet.csv` reports:
 
 ```text
 # target-label valid outputs / # valid outputs × 100
 ```
 
-- **Reviews:** percentage of valid outputs labeled `AI`
-- **Diet:** percentage of valid XOR-corrected outputs labeled `Day 2`
+A cell is left **blank** if fewer than 50 valid outputs exist (out of 100 expected).
 
-A valid output parses into one of the allowed labels for that task. If fewer than 50 valid outputs exist for a cell (out of 100 expected), the cell is left blank.
+### Pre-registration vs. post-registration models
 
-**Batch diet cells:** The in-notebook batch parser (`parse_batch_predictions`) often fails for diet because models return prediction ids inconsistently across providers (e.g. displayed item numbers vs. `user_id`s). When building the results tables, batch diet values were therefore computed from `raw_batches.jsonl` instead: labels were read from the raw model output, mapped to items positionally, and XOR correction was applied manually using each item’s `is_swapped` flag from the experiment data. This is not an issue with the LLM call itself. 
+- **Pre-registration models:** tested before preregistration; used to discover prompt configurations that appeared hackable.
+- **Post-registration models:** eligible releases after preregistration; used as prospective confirmatory tests.
 
-### `analysis.py`
+Both phases' outputs live under `outputs/preregistration/` and `outputs/postregistration/`.
 
-Evaluates how well the preregistration protocol mitigates LLM p-hacking using `reviews.csv` and `diet.csv`. Models are ordered by release date. A cell is **hacked** if its value is at or above the task threshold (reviews ≥ 3%, diet ≥ 53%). Blank cells are excluded.
-
-**Mitigation rate** = among hacked cells where a later model has valid data for that config, the fraction where the **next** such model is *not* hacked.
-
-The script runs three analyses:
-
-1. **Threshold sensitivity** — Sweeps the hacking threshold (reviews 1.0–10.0%, step 0.5; diet 51.0–60.0%, step 0.5) and reports the mitigation rate at each level. Tests how sensitive the protocol’s success is to where the “hacked” cutoff is set.
-2. **Adversarial prompt choice** — At each model release, assumes the researcher preregisters the single most hackable config seen so far, then checks whether that choice still hacks on the next model. Two strategies: `latest_max` (highest hacked value on the most recent model) and `most_freq` (config hacked on the most prior models; ties broken by mean value).
-3. **Single model class** — Same baseline mitigation check as above, but restricted to each provider’s own release timeline (e.g. only Anthropic → next Anthropic), plus an aggregate across all providers.
-
-```bash
-pip install pandas numpy
-python analysis.py reviews.csv diet.csv analysis_out/
-```
-
-`analysis_out/` contains six CSVs: `{task}_threshold_sensitivity.csv`, `{task}_adversarial.csv`, and `{task}_single_provider.csv` for each task.
+---
 
 ## Tasks
 
-### Reviews Task
+### Reviews task
 
 The model receives a product review and classifies it as `AI` or `Human`.
 
-Default sample size: `N_REVIEWS = 100`
+- Default sample size: `N_REVIEWS = 100`
+- Allowed parsed labels: `AI`, `Human`
 
-### Diet Task
+### Diet task
 
 The model receives two food diary entries from the same user and chooses which displayed day has lower total calories (`Day 1` or `Day 2`).
 
-The code selects one pair of consecutive diary days per user and randomizes which chronological day is shown as Day 1. Each item gets an `is_swapped` flag. Diet outputs include `output_xor_corrected` to map the model’s displayed-label answer back to the chronological day.
+- Default sample size: `TARGET_DIET_USERS = 100`
+- The code selects **one pair of consecutive diary days per user** and randomizes which chronological day is shown as Day 1 vs Day 2
+- Each item gets an `is_swapped` flag; outputs are XOR-corrected back to chronological days before computing percentage
+- Allowed parsed labels: `Day 1`, `Day 2`
 
-Default sample size: `TARGET_DIET_USERS = 100`
+#### Diet null (50% base rate)
 
-## Datasets Used
+The 53% threshold assumes the true rate of “later chronological day lower in calories” is ~50%. We verify this directly from `mfp-diaries.tsv`:
 
-- Reviews Dataset: [https://docs.google.com/spreadsheets/d/1TTIzwsufcyzogro1iH1J_NUWvsDY5Y6FnIveocKHCms/edit?usp=sharing](https://docs.google.com/spreadsheets/d/1TTIzwsufcyzogro1iH1J_NUWvsDY5Y6FnIveocKHCms/edit?usp=sharing)
-- Diet Dataset: [https://drive.google.com/file/d/1tdm4Inu3jPYzLnwBRPQVrejmWI5oBAgv/view?usp=sharing](https://drive.google.com/file/d/1tdm4Inu3jPYzLnwBRPQVrejmWI5oBAgv/view?usp=sharing)
+- **`diet_base_rate.ipynb`** — check on the first consecutive pair per study user: count, rate, 95% CI, and exact binomial test against 0.5
+- **`extract_diet_ground_truth.py`** — writes `diet_ground_truth.csv` for replication analysis
 
-## Pre-registration vs. Post-registration Models
+---
 
-- **Pre-registration models:** tested before preregistration; used to identify prompt configurations that appeared to produce hacking effects.
-- **Post-registration models:** eligible models released after preregistration; used as a prospective test of whether those effects generalize.
+## Experiment conditions (prompts and decoding)
 
-## Model Inclusion and Exclusion Criteria
+All prompt templates live in `Cleaned_Code.ipynb` (`UNIFIED_CONFIGS`). Each config has separate review and diet prompt strings.
 
-Models are selected from OpenAI, Anthropic/Claude, Google/Gemini, and xAI/Grok via OpenRouter. Included models are general-purpose mid-tier or higher. Excluded: `mini`/`lite`/`nano` variants, code/codex models, embedding/image/audio models, models under 7B parameters, and special-purpose variants.
+### Single-item conditions
 
-## Experiment Conditions
-
-### Single-Item Conditions
-
-Defined in `UNIFIED_CONFIGS` in `Cleaned_Code.ipynb`.
+Defined in `UNIFIED_CONFIGS`. Folder names under `outputs/.../` map to results-table columns.
 
 
-| Config folder (`outputs/.../`) | Results table column    | What it tests                                                                                       |
-| ------------------------------ | ----------------------- | --------------------------------------------------------------------------------------------------- |
-| `zero_shot`                    | Zero-Shot               | Neutral direct classification with minimal instructions                                             |
-| `counterfactual`               | Counterfactual          | Whether asking the model to consider evidence for the target label shifts outputs toward that label |
-| `instructional`                | Instructional           | Whether more detailed task instructions change outputs                                              |
-| `directional`                  | Directional             | Whether framing the target label as plausible or expected shifts outputs toward that label          |
-| `few_shot`                     | Few-Shot                | Whether providing examples changes classification behavior                                          |
-| `framed_imputation_rules`      | Framed+Imputation Rules | Whether positive framing plus imputation/decision rules shifts outputs                              |
-| `low_top_p`                    | Low Top-p               | Whether lower top-p decoding changes outputs                                                        |
-| `high_temp`                    | High Temp               | Whether high-temperature decoding changes outputs                                                   |
+| Config folder             | Table column            | What it tests                                                                                                                                                               |
+| ------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `zero_shot`               | Zero-Shot               | Neutral direct classification with minimal instructions                                                                                                                     |
+| `counterfactual`          | Counterfactual          | Asks the model to consider evidence *for* the target label before answering (e.g. “what would suggest this is AI-generated?” / “what evidence supports Day 2 being lower?”) |
+| `instructional`           | Instructional           | Longer expert-framed instructions with explicit task guidelines (verbose prompt)                                                                                            |
+| `directional`             | Directional             | Frames the target label as plausible or expected (“assume AI is common” / bias toward Day 2)                                                                                |
+| `few_shot`                | Few-Shot                | Includes labeled examples before the test item                                                                                                                              |
+| `framed_imputation_rules` | Framed+Imputation Rules | Positive framing of the target label plus explicit decision/imputation rules                                                                                                |
+| `low_top_p`               | Low Top-p               | Same baseline prompt, `**top_p = 0.3`** decoding                                                                                                                            |
+| `high_temp`               | High Temp               | Same baseline prompt, `**temperature = 2.0**` decoding                                                                                                                      |
 
 
-### Batch Conditions
+Default decoding (when not overridden): `temperature = 0`, `top_p = 1`.
+
+### Batch conditions
+
+Same prompt ideas but **10 items per API call** instead of 1.
 
 
-| Config folder (`outputs/.../`) | Results table column | What it tests                                             |
-| ------------------------------ | -------------------- | --------------------------------------------------------- |
-| `batched_zero_shot`            | Batched Zero-Shot    | Whether giving the model 10 items at once changes outputs |
-| `batched_low_top_p`            | Batched Low Top-p    | Whether batching plus low top-p changes outputs           |
-| `batched_high_temp`            | Batched High Temp    | Whether batching plus high temperature changes outputs    |
+| Config folder       | Table column      | What it tests                     |
+| ------------------- | ----------------- | --------------------------------- |
+| `batched_zero_shot` | Batched Zero-Shot | Baseline prompt, 10 items batched |
+| `batched_low_top_p` | Batched Low Top-p | Batching + `top_p = 0.3`          |
+| `batched_high_temp` | Batched High Temp | Batching + `temperature = 2.0`    |
 
 
-## Models
+**Batch diet parsing note:** When building `diet.csv`, batch diet cells are computed from `*raw_batches.jsonl`: labels are read from raw model output, mapped to items positionally, and XOR correction is applied using each item's swap flag. Single-item diet/reviews cells are parsed directly from JSONL label fields.
 
-### Preregistration Models
+---
 
-- `x-ai/grok-4-fast`
-- `anthropic/claude-sonnet-4.5`
-- `openai/gpt-5-chat`
-- `openai/gpt-5.1-chat`
-- `google/gemini-3-pro-preview`
-- `x-ai/grok-4.1-fast`
-- `anthropic/claude-opus-4.5`
-- `openai/gpt-5.2-chat`
-- `google/gemini-3-flash-preview`
-- `anthropic/claude-opus-4.6`
-- `anthropic/claude-sonnet-4.6`
-- `google/gemini-3.1-pro-preview`
-- `openai/gpt-5.3-chat`
+## `reviews.csv` and `diet.csv`
 
-### Postregistration Models
+These are the main results tables committed to the repo.
 
-- `x-ai/grok-4.20`
-- `anthropic/claude-opus-4.7`
-- `x-ai/grok-4.3`
-- `google/gemini-3.5-flash`
-- `anthropic/claude-opus-4.8`
+- **Reviews:** percentage of valid outputs labeled `AI`
+- **Diet:** percentage of valid XOR-corrected outputs labeled `Day 2`
 
-## Outputs
+To regenerate from `outputs/`:
 
-Experiment files live under `outputs/preregistration/` and `outputs/postregistration/`, split by task (`diet` or `reviews`), model, and config folder.
-
-Typical files per config:
-
-
-| Suffix             | Description                                     |
-| ------------------ | ----------------------------------------------- |
-| `strict_json`      | Pre-registration single-item JSONL              |
-| `minimal`          | Post-registration single-item JSONL             |
-| `baseline10_items` | Item-level batch predictions, usually 100 rows  |
-| `raw_batches`      | Raw batch API responses, usually 10 rows/batch  |
-| `downloads_csv`    | CSV source used for some pre-registration cells |
-
-
-Filename pattern:
-
-```text
-{task}__{phase}__{model}__{config}__{suffix}.jsonl
+```bash
+python build_csv.py
 ```
 
-### Output Format
+Parser (`parse_outputs_jsonl.py`):
 
-**Reviews** — allowed labels: `AI`, `Human`
+- Reads JSONL files under `outputs/{preregistration,postregistration}/{reviews,diet}/{model_slug}/{config}/`
+- Blank if `< 50` valid items parsed
+
+---
+
+## Mitigation analysis (`analysis.py`)
+
+Evaluates how well the preregistration protocol mitigates LLM p-hacking using `reviews.csv` and `diet.csv`.
+
+```bash
+python analysis.py reviews.csv diet.csv analysis_out/
+```
+
+A cell is **hacked** if its value ≥ threshold (reviews ≥ 3%, diet ≥ 53%). Blank cells are excluded.
+
+**Mitigation rate** = among hacked cells (model *i*, config *c*) where a later model has a valid value for config *c*, the fraction where the **next** such model is *not* hacked on config *c*.
+
+Models are sorted by release date; “next model” means the next row in that ordering with a non-blank value for the same config column.
+
+### 1. Threshold sensitivity (`{task}_threshold_sensitivity.csv`)
+
+Sweeps the hacking threshold and recomputes mitigation rate at each level:
+
+- Reviews: 1.0%–10.0% in 0.5 pp steps
+- Diet: 51.0%–60.0% in 0.5 pp steps
+
+Tests how sensitive protocol success is to where the “hacked” cutoff is set. 
+
+### 2. Adversarial prompt choice (`{task}_adversarial.csv`)
+
+Relaxes the baseline assumption that the researcher preregisters *any* hacked config. Instead, at each model release the adversary preregisters the **single most hackable config seen so far**, then we ask whether that choice still hacks on the **next** model.
+
+Two strategies:
+
+
+| Strategy     | Rule                                                                                                        |
+| ------------ | ----------------------------------------------------------------------------------------------------------- |
+| `latest_max` | On the most recent model, pick the hacked config with the **highest cell value**                            |
+| `most_freq`  | Pick the config hacked on the **largest number of prior models** (ties broken by highest mean value so far) |
+
+
+Output columns: `adversary_success`, `trials`, `success_rate`, `mitigation_rate` (1 − success rate)
+
+### 3. Single model class (`{task}_single_provider.csv`)
+
+Restricts the confirmatory chain to **one provider at a time** (Anthropic, OpenAI, Google, xAI): the “next model” is the next release from that provider only, not the next global release. Also reports an **ALL (baseline)** row using the full cross-provider timeline.
+
+---
+
+## Replication analysis (true effects)
+
+Mitigation analysis asks whether **spurious hacks** fail to replicate. A separate analysis asks whether **genuine effects** *do* replicate — i.e. the protocol does not indiscriminately suppress true findings.
+
+```bash
+# Requires mfp-diaries.tsv in repo root (see Datasets)
+python extract_diet_ground_truth.py   # → diet_ground_truth.csv
+python resample_effect.py             # → analysis_resampled/diet_effect_*.csv
+python replication_analysis.py        # → analysis_resampled/replication_rates.csv
+```
+
+### Step 1: `extract_diet_ground_truth.py`
+
+Scans `mfp-diaries.tsv` for the 100 study user IDs (from `CANONICAL_SWAP_MAP` in `parse_outputs_jsonl.py`). For each user, finds the **first consecutive day-pair** and records whether the later day is strictly lower in calories (`later_lower`).
+
+Writes `diet_ground_truth.csv`: `user_id`, `earlier_cal`, `later_cal`, `later_lower`, `tie`.
+
+### Step 2: `resample_effect.py`
+
+Injects a synthetic true effect of size **X%** (X ∈ {55, 60, …, 95}) by reweighting the 100 items:
+
+- **Group A:** items where Day 2 is truly lower (`later_lower=True`)
+- **Group B:** items where Day 1 is truly lower
+
+Group A receives weight X%; group B receives (100−X)%. For each (model, config) cell, the reweighted % of model outputs labeled `Day 2` is:
+
+```text
+cell(X) = X × (a/nA) + (100−X) × (b/nB)
+```
+
+where `a`/`nA` and `b`/`nB` are Day-2 counts and valid counts within each ground-truth group. Blank cells stay blank (same rule as `diet.csv`).
+
+Writes `analysis_resampled/diet_effect_{X}.csv` for each effect level.
+
+### Step 3: `replication_analysis.py`
+
+For each injected effect level X, builds the reweighted value matrix (models × configs, release-date order) and computes:
+
+**Detection:** cell ≥ 53% (same threshold as hacking, but here the effect is genuinely injected).
+
+**Replication rate** = among detected cells where a later model has valid data for that config, the fraction where the **next** such model is also detected.
+
+This mirrors `analysis.py`'s mitigation logic, but:
+
+- Input = reweighted matrices with known injected effects (not raw `diet.csv`)
+
+Writes `analysis_resampled/replication_rates.csv`
+
+---
+
+## Datasets
+
+Download and place in the **repository root** (paths used by `Cleaned_Code.ipynb`):
+
+
+| File                             | Source                                                                                                                             |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `filtered_reviews_2017_2022.csv` | [Reviews spreadsheet export](https://docs.google.com/spreadsheets/d/1TTIzwsufcyzogro1iH1J_NUWvsDY5Y6FnIveocKHCms/edit?usp=sharing) |
+| `mfp-diaries.tsv`                | [MyFitnessPal diaries TSV](https://drive.google.com/file/d/1tdm4Inu3jPYzLnwBRPQVrejmWI5oBAgv/view?usp=sharing) (~2 GB)             |
+
+
+Not included directly in the repo due to size.
+
+---
+
+## `outputs/` layout
+
+```text
+outputs/
+├── preregistration/
+│   ├── reviews/{model_slug}/{config}/*.jsonl
+│   └── diet/{model_slug}/{config}/*.jsonl
+└── postregistration/
+    └── ...
+```
+
+### Output record format
+
+**Reviews:**
 
 ```json
 {
@@ -191,7 +280,7 @@ Filename pattern:
 }
 ```
 
-**Diet** — allowed labels: `Day 1`, `Day 2`
+**Diet:**
 
 ```json
 {
@@ -201,47 +290,53 @@ Filename pattern:
 }
 ```
 
-## Running the Experiment
+---
 
-The notebook is designed to run in Google Colab using OpenRouter.
+## Running new experiments
 
-```python
-MODELS = ["google/gemini-3.5-flash"]
-OUT_DIR = "outputs"
-
-all_run_outputs = run_experiments(
-    models=MODELS,
-    out_dir=OUT_DIR,
-    single_config_names=[
-        "zero_shot", "counterfactual", "instructional", "directional",
-        "few_shot", "framed_imputation_rules", "low_top_p", "high_temp",
-    ],
-    batch_configs=[BATCH_CONFIG, BATCH_HIGH_TEMP_CONFIG, BATCH_LOW_P_CONFIG],
-    single_limit=None,
-    batch_limit=None,
-    skip_existing=True,
-)
-```
+`Cleaned_Code.ipynb` uses OpenRouter. Export `OPENROUTER_API_KEY` in your shell before running.
 
 Outputs are written to:
 
 ```text
-{OUT_DIR}/{phase}/{task}/{model_slug}/{config_folder}/{task}__{phase}__{model_slug}__{config_folder}__{suffix}.jsonl
+{OUT_DIR}/{phase}/{task}/{model_slug}/{config}/{task}__{phase}__{model_slug}__{config}__{suffix}.jsonl
 ```
 
-## Key Functions
+After adding outputs: `python build_csv.py` then run `python analysis.py reviews.csv diet.csv analysis_out/`.
+
+### Key notebook functions
 
 
-| Function                              | Purpose                                      |
-| ------------------------------------- | -------------------------------------------- |
-| `load_reviews_df()`                   | Loads review examples                        |
-| `build_diet_pair_df()`                | Builds consecutive diet-day pairs            |
-| `randomize_diet_pairs()`              | Randomizes displayed diet day order          |
-| `call_llm_strict_json()`              | Calls the model with strict JSON output      |
-| `parse_strict_label()`                | Extracts the predicted label                 |
-| `xor_correct_diet_label()`            | Corrects diet labels after randomization     |
-| `run_task_single_jsonl_strict_fast()` | Runs single-item experiments                 |
-| `run_task_batch_jsonl_strict_fast()`  | Runs batch experiments                       |
-| `run_experiments()`                   | Runs all selected models, tasks, and configs |
+| Function                              | Purpose                                       |
+| ------------------------------------- | --------------------------------------------- |
+| `load_reviews_df()`                   | Load review examples                          |
+| `build_diet_pair_df()`                | Build consecutive diet-day pairs              |
+| `randomize_diet_pairs()`              | Randomize displayed day order                 |
+| `call_llm_strict_json()`              | Call model with strict JSON output            |
+| `parse_strict_label()`                | Extract predicted label                       |
+| `xor_correct_diet_label()`            | Map displayed label back to chronological day |
+| `run_task_single_jsonl_strict_fast()` | Run single-item experiments                   |
+| `run_task_batch_jsonl_strict_fast()`  | Run batch experiments                         |
+| `run_experiments()`                   | Run all selected models, tasks, and configs   |
 
+
+---
+
+## Checklist
+
+```bash
+# Install dependencies
+pip install pandas numpy matplotlib scipy
+
+# 1. Results tables (already committed; regenerate if needed)
+python build_csv.py
+
+# 2. Mitigation / adversarial / provider analyses
+python analysis.py reviews.csv diet.csv analysis_out/
+
+# 3. Replication analysis (requires mfp-diaries.tsv)
+python extract_diet_ground_truth.py
+python resample_effect.py
+python replication_analysis.py
+```
 
