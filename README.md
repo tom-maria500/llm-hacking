@@ -195,7 +195,14 @@ Restricts the confirmatory chain to **one provider at a time** (Anthropic, OpenA
 
 ## Replication analysis (true effects)
 
-Mitigation analysis asks whether **spurious hacks** fail to replicate. A separate analysis asks whether **genuine effects** *do* replicate — i.e. the protocol does not indiscriminately suppress true findings.
+Mitigation analysis asks whether **spurious hacks** fail to replicate on the next model. Replication analysis asks the converse for **genuine effects**: after a model detects an injected true effect (cell ≥ 53%), how often is that effect **confirmed**?
+
+`replication_analysis.py` compares two confirmation strategies on the same detected cells:
+
+1. **Our protocol** (`replication_rate`): confirm on the **next released model** with valid data for that config — the same cross-model logic as mitigation, but here detection means a real injected effect.
+2. **Same-model baseline** (`same_model_baseline`): confirm by **re-measuring the discovering model** on a fresh bootstrap resample of the 100 study items (resampling within each ground-truth group). This isolates 100-item sampling noise and the regression-to-the-mean / winner's-curse bias of re-using the same model.
+
+The figure plots the mean confirmation rate for each strategy across effect strengths. A genuine effect should confirm more reliably under the protocol than under same-model re-measurement, especially at modest effect sizes.
 
 ```bash
 # Requires mfp-diaries.tsv in repo root (see Datasets)
@@ -229,18 +236,26 @@ Writes `analysis_resampled/diet_effect_{X}.csv` for each effect level.
 
 ### Step 3: `replication_analysis.py`
 
-For each injected effect level X, builds the reweighted value matrix (models × configs, release-date order) and computes:
+For each injected effect level X:
 
-**Detection:** cell ≥ 53% (same threshold as hacking, but here the effect is genuinely injected).
+1. Build the reweighted value matrix (models × configs, release-date order).
+2. Mark cells **detected** if reweighted Day-2 rate ≥ 53%.
+3. For each detected cell (model *i*, config *c*) that has a later model with valid data for *c*, record two paired confirmation outcomes:
 
-**Replication rate** = among detected cells where a later model has valid data for that config, the fraction where the **next** such model is also detected.
+| Outcome | Column | Definition |
+|---------|--------|------------|
+| Protocol | `replication_rate` | 1 if the **next** such model is also detected, else 0 |
+| Baseline | `same_model_baseline` | Bootstrap estimate of P(the **same** model, on a fresh 100-item resample, is still detected) |
 
-This mirrors `analysis.py`'s mitigation logic, but:
+**Replication rate** = mean of the protocol column over evaluable detected cells. This mirrors `analysis.py`'s mitigation logic (`hacked` → `detected`, `prevented` → `replicated`), but on reweighted matrices with known injected effects rather than raw `diet.csv`.
 
-- Input = reweighted matrices with known injected effects (not raw `diet.csv`)
+**Same-model baseline** = mean of the baseline column over the same cells. It answers: “if I just re-ran this model on another draw of the same 100 items, how often would I still clear 53%?” — capturing sampling noise and winner's curse without switching models.
 
-Writes `analysis_resampled/replication_rates.csv`
+95% confidence bands use a **cluster bootstrap** over discovering models (up to 11 configs per model are correlated).
 
+**Outputs:**
+
+- `analysis_resampled/replication_rates.csv` — `replication_rate`, `same_model_baseline`, CI bounds (`rate_lo`/`rate_hi`, `base_lo`/`base_hi`), and counts
 ---
 
 ## Datasets

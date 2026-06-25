@@ -94,7 +94,7 @@ def main():
 
     for x in EFFECT_LEVELS:
         rows = [HEADER]
-        for mn, ms, prov, rd in P.MODELS:
+        for mn, ms, prov, rd in P.models_by_release_date():
             row = [mn, prov, rd]
             for cfg, _col in CONFIGS:
                 items = cells[(ms, cfg)]
