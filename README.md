@@ -217,17 +217,6 @@ Writes `diet_ground_truth.csv`: `user_id`, `earlier_cal`, `later_cal`, `later_lo
 
 ### Step 2: `resample_effect.py`
 
-Two related utilities live in this file:
-
-**Deterministic reweighting** (writes `diet_effect_{X}.csv`): inject effect X% by reweighting the 100 items:
-
-- **Group A:** items where Day 2 is truly lower (`later_lower=True`)
-- **Group B:** items where Day 1 is truly lower
-
-```text
-cell(X) = X × (a/nA) + (100−X) × (b/nB)
-```
-
 **Sampling with replacement** (used by `replication_analysis.py`): `sampled_pct_from_groups` draws `n` items with replacement, picking each draw from group A with probability X/100 and from group B with (100−X)/100, then returns the observed % labeled `Day 2`. Expectation matches the reweighting formula, but carries finite-sample noise.
 
 Writes `analysis_resampled/diet_effect_{X}.csv` for each effect level (deterministic reweighting).
